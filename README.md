@@ -189,33 +189,56 @@ retrieved_data = collection.get_data_from_query()
 
 ### Prompt Tuning Pipeline
 
-The prompt tuning pipleine is stored under `PromptTuning/src/` and will be called from `PromptTuning/tune_prompt.py`. It consists out of the follwing files:
+The prompt tuning pipleine is stored under `PromptTuning/src/` and will be called from `PromptTuning/tune_prompt.py`. tune_prompt.py loads the AutomaticPromptOptimizer class and starts the tuning job. After tuning the tuned programm, as well as the produced prompt is saved. It uses argparse to parse the arguments, that are nessecary for the prompt tuning process.
 
-#### `config.py`
+
+#### config.py
 
 Only stores the initial seed prompt and the API-Key. The API-Key will be loaded from an environment vaiable called `GEMINI_API_KEY` 
 
-#### `dspy_programm.py`
+#### generate_input_data.py
 
-Defines the core DSPy extraction module. This includes:
-- A **DSPy Signature**, which defines the input and output filed of the model. The input filed is filled with the seed prompt. 
-- A **DSPy Module**, which will handle the information extraction for us in the forward method. 
+`generate_input_data.py` implements the class `DataLoaderDspy`, which has three pourposes. It loads the annotations, form the Label Studio JSON annotation export, converts it into the ideal output format, which is required for the dspy optimization and performs a train test split and returns the train, val, test-sets.
 
-#### `generate_input_data.py`
+Usage: 
 
-Converts the Label Studio JSON annotation export (`PromptTuning/data/annotations.json`) into a list of `dspy.Example` objects.
+```py 
+from PromptTuning.src.generate_input_data import DataLoaderDspy
 
-Label Studio is used as the human annotation tool: annotators are shown newspaper page texts and asked to label the fields of each marriage request. The JSON export contains the raw text, the annotated field values and more metadata. This script parses that format and maps it to the input/output structure expected by the DSPy signature, then performs a train/validation split (matching the pickled splits in `data/`).
+loader = DataLoaderDspy(path_to_annotations="Path to the annotations")
+train_set, val_set, test_set = loader.train_test_split()
 
-#### `optimization_metric.py`
+```
 
-Defines the **evaluation metric** used by the DSPy optimizer to score each candidate prompt during the optimization loop.
+#### dspy_programm.py
 
-Calculates the success metric for the gepa optimizer. The success metric is the recall, this method could also be modified to optimize for precision or recall, simply by returning the value for the given metric calculated ealier inside of the function. Both inputs have to be read by ast.
+Defines the core DSPy extraction module, which defines the interface on how the model receives an input and what output it should return. The current implementation is more or less raw. It could be extended with the use of Pydantic-Schemes to provide the dspy framework with more insight on how input and output should look like.
 
-#### `optimizer_dspy.py`
+The implementation includes:
 
-Runs the DSPy optimization process. It instantiates the LM (Gemini via LiteLLM), loads the DSPy program from `dspy_programm.py`, loads training examples from `generate_input_data.py`, and calls a DSPy optimizer GEPA to compile the program.
+- A DSPy Signature, which defines the input and output filed of the model. The input filed is filled with the seed prompt. 
+- A DSPy Module, which will handle the information extraction for us in the forward method. 
 
-The result is a compiled DSPy program — a standard DSPy module with the optimized prompt baked in — saved as `program.pkl` alongside a `metadata.json` file recording the model name, metric scores, and timestamp.
+#### optimization_metric.py
 
+Defines the evaluation metric, which is used by the DSPy optimizer to score each candidate prompt during the optimization loop. The metric we want to optimize for is the f1-score.  The key function implemeted here is metric, which calculates the numeric success shown to the gepa optimizer. This could potentially be extrended with the implementation of a metric_with_feedback, so we don't only provide the model with a numeric measure of success, but only providing a natural language feedback.
+
+
+#### optimizer_dspy.py
+
+This script implements the class `AutomaticPromptOptimizer`, which will be used to run the end-to-end process of prompt-tuning. It takes the path to the annotations and the api key as input. The flow that will be executed inside of optimize_prompt is the following. At first the dspy lm model will be initialized. The the data is loaded and a train test split is performed. After this, an intial evaluation on the test set is performed with the seed prompt to calculate the performance baseline against which we'll measure the tuned prompts performance. After this the gepa optimization will be executed. After the optimization is done we'll measure the performance of the tuned prompt und the test set to check if the newly constructed prompt performs better, that the intial one. The optimized programm will be saved in self.optimized_programm and also returned. 
+
+Usage:
+
+```py
+from src.PromptTuning.src.optimizer_dspy import AutomaticPromptOptimizer
+
+optim = AutomaticPromptOptimizer(
+    path_to_annotations="Path to annotations,
+    api_key="API_KEY here"
+)
+
+optimized_programm = optim.optimize_prompt()
+
+
+```
