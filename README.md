@@ -12,12 +12,13 @@
 - [Implementation details](#implementation-details)
     - [Data Collection](#data-collection)
     - [Prompt Tuning](#prompt-tuning-1)
+- [Limitations](#limitiations)
 
 ## Description and use case
 
 This project addresses the challange of automatically extracting structured information from german historical newspaper pages - more specifically extracting **marriage requests**.
 
-Historical newspapers contain a broad range of information about social phenomenons hidden in unstructured OCR-read text. Marriage requests contain usually a very predictable set of informations, which helps us (and the llm) to specifically extract those. Those informations are: the requester's name, age, occupation, place of residence, desired partner characteristics, and sometimes a contact address. Howevery, because the texts we work with comes from very old prints, that are often very noisy, inconsitently formatted and mixed with lots of unrelated content on the same page - rule-based information extraction would hit its limits. Thus we propose a llm-based pipeline to reliably extract structured information from those unstructured texts. 
+Historical newspapers contain a broad range of information about social phenomenons hidden in unstructured OCR-read text. Marriage requests contain usually a very predictable set of informations, which helps us (and the llm) to specifically extract those. Those informations are: the sex, age, occupation, place of residence, desired partner characteristics, and sometimes a contact address. Howevery, because the texts we work with comes from very old prints, that are often very noisy, inconsitently formatted and mixed with lots of unrelated content on the same page - rule-based information extraction would hit its limits. Thus we propose a llm-based pipeline to reliably extract structured information from those unstructured texts. 
 The goals of the pipeline are:
 
 1. **Collecting relevant newspaper pages**  from the deutsches zeitungsportal, by using a keyword search via their publicly accessible API - for more information see the paragraph [Data Source](#data-source).
@@ -159,8 +160,7 @@ The deutsche digitale bibliothek offers with its digital newspaper collection ac
 The pages, including their ocr-read texts, incl. metadata can retrieved via <a href="https://github.com/Deutsche-Digitale-Bibliothek/ddblabs-ddbapi">API</a>.
 
 The search terms used in this project to find marriage requests are:
-- `"zwecks Heirat"` (for the purpose of marriage)
-- `"zwecks heirat"` (lowercase variant, as OCR output is inconsistent)
+- `"zwecks heirat"` (for the purpose of marriage)
 
 These phrases appear characteristically in the preamble of marriage request classified ads from the late 19th and early 20th century.
 
@@ -170,16 +170,32 @@ These phrases appear characteristically in the preamble of marriage request clas
 
 ### Data Collection
 
-The data for the following project is retrieved via the `ddbapi` python wrapper, which is provided by the deutsche digitale bibiliothek on github/pypi. The script DataCollection/DataCollector.py implements the class `DataCollector`, which retrieves the data from the `ddbapi` and saves it into a pandas dataframe. Due to rate limits/time-outs inside the api, we have to collect the data iterativly for every query and place. If we would call the list of queries and places all at once the api connection would close after a certain amout of time due to the dataset we will retrieve beeing to big big in most cases. 
+The data for the following project is retrieved via the `ddbapi` python wrapper, which is provided by the deutsche digitale bibiliothek on github/pypi. The script DataCollection/DataCollector.py implements the class `DataCollector`, which retrieves the data from the `ddbapi` and saves it into a pandas dataframe. Due to rate limits/time-outs inside the api, we have to collect the data iterativly for every query and zdb_ids (unique newspaper issue identifier). If we would call the list of queries and zdb_ids all at once the api connection would close after a certain amout of time due to the dataset we will retrieve beeing to big big in most cases. 
 
 ```py
 
 from DataCollection.DataCollector import DataCollector
 
+# Newspapers and corresponding ZDB IDs:
+# - General-Anzeiger, unabhängige Tageszeitung für Bonn ; Bonner Stadtanzeiger
+#       ZDB-ID: 2815866-0
+# - Hamburger Fremdenblatt
+#       ZDB-ID: 3024925-9
+# - Münchner neueste Nachrichten, Wirtschaftsblatt, alpine und Sport-Zeitung, Theater- und Kunst-Chronik
+#       ZDB-ID: 3136538-3
+# - Badische Presse, Generalanzeiger der Residenz Karlsruhe und des Großherzogtums Baden
+#       ZDB-ID: 2797055-3
+
+default_zdb_ids = [
+    "2815866-0",
+    "3024925-9",
+    "3136538-3",
+    "2797055-3"
+]
 collection = DataCollector(
-        places=["Hamburg", "München"],
+        zdb_ids=default_zdb_ids,
         write_output=False,
-        query=["zwecks Heirat", "zwecks heirat"]
+        query=["zwecks heirat"]
         )
 retrieved_data = collection.get_data_from_query()
 
@@ -234,11 +250,13 @@ Usage:
 from src.PromptTuning.src.optimizer_dspy import AutomaticPromptOptimizer
 
 optim = AutomaticPromptOptimizer(
-    path_to_annotations="Path to annotations,
+    path_to_annotations="Path to annotations",
     api_key="API_KEY here"
 )
 
 optimized_programm = optim.optimize_prompt()
-
-
 ```
+
+# Limitiations
+
+The main limitation of this pipeline lies in the ocr-quality of the underlying newspaper pages. OCR-quality and layout noise of the historical newspapers can prevent the model from reliably detecting marriage requests from a newspaper page, even though human annotators could still infer the presence of marriage request inside of a text. Improving the ocr-quality of the texts through reapplying ocr would be beneficial for the extraction quality. Another limitation is the domain and language specificity: the prompt, search terms, and evaluation setup are tailored to german marriage requests from a narrow historical period (and data provider), so out‑of‑domain advertisements or other languages will likely require re‑annotation and re‑tuning before comparable extraction quality can be achieved. Also it may be that the prompt produced with the gepa optimization, that has been performed on a specific gemini-model, will generalise to other models of the gemini-family or even other model families. 

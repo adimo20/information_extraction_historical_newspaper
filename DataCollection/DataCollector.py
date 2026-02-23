@@ -2,26 +2,26 @@ import pandas as pd
 from ddbapi import zp_pages
 import random
 
-default_places = [
-    "Stuttgart", "Köln", "Hamburg", "Bonn", "Bad Godesberg", "Kleve (Kreis Kleve)", "Jülich", "Dortmund",
-    "Siegburg", "Euskirchen", "Halle (Saale)", "Münster (Westf)", "Berlin", "Duisburg", "Bielefeld",
-    "Stuttgart-Untertürkheim", "Untertürkheim", "Feuerbach (Stuttgart)", "Stuttgart-Feuerbach", "Stuttgart-Zuffenhausen",
-    "Zuffenhausen", "Botnang", "Degerloch", "Münster (Stuttgart)", "Obertürkheim", "Stuttgart-Botnang",
-    "Stuttgart-Degerloch", "Stuttgart-Münster", "Stuttgart-Obertürkheim", "Aachen", "Ruhrort", "Bonn-Bad Godesberg",
-    "Karlsruhe", "Solingen", "Moers", "Meiderich", "Regierungsbezirk Aachen", "Düren", "Mannheim", "Beckum",
-    "Mülheim an der Ruhr", "Gütersloh", "München-Gladbach", "Warendorf", "Ahlen (Kreis Warendorf)", "Dinslaken",
-    "Mönchengladbach", "Gladbach-Rheydt", "Ohligs", "Oelde", "Wiedenbrück", "Dresden", "Iserlohn", "Hamborn",
-    "Oberhausen (Rheinland)", "Wesel", "Düsseldorf", "Biberach an der Riß", "Merseburg", "Kreis Solingen",
-    "Gräfrath", "Duisburg-Hamborn", "Bad Buchau", "Hagen", "Hamburg-Harburg", "Harburg (Elbe)",
-    "Harburg-Wilhelmsburg", "Arnsberg", "Haan", "Riedlingen", "Wülfrath", "Witten", "Krefeld", "Velbert",
-    "Velbert-Langenberg", "Mettmann", "Hamm (Westf)", "Soest", "Werl", "Hannover", "Geldern", "Bergheim (Erft)",
-    "Bergedorf", "Castrop-Rauxel", "Geesthacht", "Hamburg-Bergedorf", "Hamburg-Lohbrügge", "Stormarn", "Leipzig",
-    "Bensberg", "Bergisch Gladbach", "Bergisch Gladbach-Bensberg", "Schwarzenberg/Erzgeb.", "Dorsten",
-    "Ochsenhausen", "Heiligenhaus", "Neviges", "Landkreis Kempen-Krefeld", "New York, NY", "Heidelberg"
+# Newspapers and corresponding ZDB IDs:
+# - General-Anzeiger, unabhängige Tageszeitung für Bonn ; Bonner Stadtanzeiger
+#       ZDB-ID: 2815866-0
+# - Hamburger Fremdenblatt
+#       ZDB-ID: 3024925-9
+# - Münchner neueste Nachrichten, Wirtschaftsblatt, alpine und Sport-Zeitung, Theater- und Kunst-Chronik
+#       ZDB-ID: 3136538-3
+# - Badische Presse, Generalanzeiger der Residenz Karlsruhe und des Großherzogtums Baden
+#       ZDB-ID: 2797055-3
+
+default_zdb_ids = [
+    "2815866-0",
+    "3024925-9",
+    "3136538-3",
+    "2797055-3"
 ]
+
 class DataCollector:
-    def __init__(self, places:list[str], write_output:bool=False, output_path:str=None, query:list[str]=None):
-        self.places:list[str] = default_places if places is None else places
+    def __init__(self, zdb_ids:list[str], write_output:bool=False, output_path:str=None, query:list[str]=None):
+        self.zdb_ids: list[str] = default_zdb_ids if zdb_ids is None else zdb_ids
         self.write_output = write_output
         self.output_path = output_path
         self.query = query
@@ -54,14 +54,15 @@ class DataCollector:
 
         df_list = []
         for q in self.query:
-            for place in self.places:
+            for zdb_id in self.zdb_ids:
                 df = zp_pages(
                     publication_date='[1850-01-01T12:00:00Z TO 1980-12-31T12:00:00Z]', 
-                    place_of_distribution=place, 
+                    zdb_id=zdb_id,
                     plainpagefulltext=q
                     )
                 if df is not None and len(df) > 0:
                     df["query"] = q
+                    df["zdb_id"] = zdb_id
                     df_list.append(df)
         
 
@@ -85,8 +86,8 @@ class DataCollector:
 if __name__ == "__main__":
     
     collection = DataCollector(
-        places=["Hamburg", "München"],
+        zdb_ids=default_zdb_ids,
         write_output=False,
-        query=["zwecks Heirat", "zwecks heirat"]
+        query=["zwecks heirat"]
         )
     retrieved_data = collection.get_data_from_query()
